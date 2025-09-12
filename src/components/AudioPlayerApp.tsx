@@ -44,7 +44,33 @@ const AudioPlayerApp: React.FC = () => {
       }
     };
 
+    // Set up message listener for state updates
+    const messageListener = (message: any, _sender: chrome.runtime.MessageSender, _sendResponse: (response?: any) => void) => {
+      if (message.action === 'STATE_BROADCAST' && message.state) {
+        setAudioState(message.state);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
     loadState();
+
+    // Set up periodic state sync to handle any missed updates
+    const intervalId = setInterval(async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ action: 'GET_STATE' });
+        if (response) {
+          setAudioState(response);
+        }
+      } catch (error) {
+        console.debug('Periodic state sync failed:', error);
+      }
+    }, 1000); // Update every second
+
+    // Cleanup
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener);
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Send command to background script
@@ -57,12 +83,23 @@ const AudioPlayerApp: React.FC = () => {
       return response;
     } catch (error) {
       console.error('Failed to send command:', error);
+      // On error, try to refresh state
+      try {
+        const stateResponse = await chrome.runtime.sendMessage({ action: 'GET_STATE' });
+        if (stateResponse) {
+          setAudioState(stateResponse);
+        }
+      } catch (stateError) {
+        console.error('Failed to refresh state after error:', stateError);
+      }
     }
   }, []);
 
   const handlePlay = () => sendCommand('PLAY');
   const handlePause = () => sendCommand('PAUSE');
   const handleStop = () => sendCommand('STOP');
+  const handleNextTrack = () => sendCommand('NEXT_TRACK');
+  const handlePreviousTrack = () => sendCommand('PREVIOUS_TRACK');
 
   const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -94,8 +131,20 @@ const AudioPlayerApp: React.FC = () => {
     sendCommand('REMOVE_TRACK', { trackId });
   };
 
-  const handleSelectTrack = (trackId: string) => {
-    sendCommand('SET_CURRENT_TRACK', { trackId });
+  const handleSelectTrack = async (trackId: string) => {
+    // Provide immediate visual feedback
+    const trackIndex = audioState.playlist.findIndex(track => track.id === trackId);
+    if (trackIndex !== -1 && trackIndex !== audioState.currentIndex) {
+      // Update UI immediately for responsiveness
+      setAudioState(prev => ({
+        ...prev,
+        currentIndex: trackIndex,
+        currentTime: 0
+      }));
+      
+      // Send command to background
+      await sendCommand('SET_CURRENT_TRACK', { trackId });
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,6 +195,13 @@ const AudioPlayerApp: React.FC = () => {
               </div>
 
               <div className="controls">
+                <button 
+                  className="control-button" 
+                  onClick={handlePreviousTrack}
+                  disabled={audioState.playlist.length <= 1}
+                >
+                  ⏮️
+                </button>
                 <button className="control-button" onClick={handleStop}>
                   ⏹️
                 </button>
@@ -155,7 +211,11 @@ const AudioPlayerApp: React.FC = () => {
                 >
                   {audioState.isPlaying ? '⏸️' : '▶️'}
                 </button>
-                <button className="control-button">
+                <button 
+                  className="control-button" 
+                  onClick={handleNextTrack}
+                  disabled={audioState.playlist.length <= 1}
+                >
                   ⏭️
                 </button>
               </div>

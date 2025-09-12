@@ -110,6 +110,16 @@ body {
   background: rgba(255, 255, 255, 0.3);
 }
 
+.control-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.control-button:disabled:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .control-button.play {
   width: 56px;
   height: 56px;
@@ -170,6 +180,8 @@ body {
 
 .playlist-item.active {
   background: rgba(255, 255, 255, 0.2);
+  border-left: 3px solid white;
+  padding-left: 9px;
 }
 
 .playlist-item-info {

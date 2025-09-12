@@ -24,10 +24,20 @@ class OffscreenAudioPlayer {
       this.sendStateUpdate();
     });
 
+    this.audio.addEventListener('play', () => {
+      this.sendStateUpdate();
+    });
+
+    this.audio.addEventListener('pause', () => {
+      this.sendStateUpdate();
+    });
+
     this.audio.addEventListener('ended', () => {
       this.sendStateUpdate();
       // Notify background script that track ended
-      chrome.runtime.sendMessage({ action: 'TRACK_ENDED' });
+      chrome.runtime.sendMessage({ action: 'TRACK_ENDED' }).catch(error => {
+        console.debug('Failed to send track ended message:', error);
+      });
     });
 
     this.audio.addEventListener('error', (e) => {
@@ -35,7 +45,21 @@ class OffscreenAudioPlayer {
       chrome.runtime.sendMessage({ 
         action: 'AUDIO_ERROR', 
         error: this.audio.error?.message 
+      }).catch(error => {
+        console.debug('Failed to send error message:', error);
       });
+    });
+
+    this.audio.addEventListener('volumechange', () => {
+      this.sendStateUpdate();
+    });
+
+    this.audio.addEventListener('seeking', () => {
+      this.sendStateUpdate();
+    });
+
+    this.audio.addEventListener('seeked', () => {
+      this.sendStateUpdate();
     });
   }
 
@@ -107,9 +131,13 @@ class OffscreenAudioPlayer {
   }
 
   private sendStateUpdate() {
+    const state = this.getAudioState();
     chrome.runtime.sendMessage({
       action: 'AUDIO_STATE_UPDATE',
-      state: this.getAudioState()
+      state: state
+    }).catch(error => {
+      // Ignore errors if background script is not ready
+      console.debug('Failed to send state update:', error);
     });
   }
 }
