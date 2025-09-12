@@ -36,7 +36,7 @@ const AudioPlayerApp: React.FC = () => {
     const loadState = async () => {
       try {
         const response = await chrome.runtime.sendMessage({ action: 'GET_STATE' });
-        if (response) {
+        if (response && response.playlist) {
           setAudioState(response);
         }
       } catch (error) {
@@ -46,7 +46,7 @@ const AudioPlayerApp: React.FC = () => {
 
     // Set up message listener for state updates
     const messageListener = (message: any, _sender: chrome.runtime.MessageSender, _sendResponse: (response?: any) => void) => {
-      if (message.action === 'STATE_BROADCAST' && message.state) {
+      if (message.action === 'STATE_BROADCAST' && message.state && message.state.playlist) {
         setAudioState(message.state);
       }
     };
@@ -58,7 +58,7 @@ const AudioPlayerApp: React.FC = () => {
     const intervalId = setInterval(async () => {
       try {
         const response = await chrome.runtime.sendMessage({ action: 'GET_STATE' });
-        if (response) {
+        if (response && response.playlist) {
           setAudioState(response);
         }
       } catch (error) {
@@ -116,6 +116,14 @@ const AudioPlayerApp: React.FC = () => {
   const handleAddTrack = async () => {
     if (!trackName.trim() || !trackUrl.trim()) return;
 
+    // Basic URL validation
+    try {
+      new URL(trackUrl.trim());
+    } catch (error) {
+      console.error('Invalid URL provided:', trackUrl);
+      return;
+    }
+
     const track: AudioTrack = {
       id: Date.now().toString(),
       name: trackName.trim(),
@@ -133,7 +141,7 @@ const AudioPlayerApp: React.FC = () => {
 
   const handleSelectTrack = async (trackId: string) => {
     // Provide immediate visual feedback
-    const trackIndex = audioState.playlist.findIndex(track => track.id === trackId);
+    const trackIndex = audioState.playlist?.findIndex(track => track.id === trackId) || -1;
     if (trackIndex !== -1 && trackIndex !== audioState.currentIndex) {
       // Update UI immediately for responsiveness
       setAudioState(prev => ({
@@ -167,7 +175,7 @@ const AudioPlayerApp: React.FC = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const currentTrack = audioState.currentIndex >= 0 ? audioState.playlist[audioState.currentIndex] : null;
+  const currentTrack = (audioState.currentIndex >= 0 && audioState.playlist && audioState.playlist.length > 0) ? audioState.playlist[audioState.currentIndex] : null;
   const progressPercent = audioState.duration > 0 ? (audioState.currentTime / audioState.duration) * 100 : 0;
 
   return (
@@ -198,7 +206,7 @@ const AudioPlayerApp: React.FC = () => {
                 <button 
                   className="control-button" 
                   onClick={handlePreviousTrack}
-                  disabled={audioState.playlist.length <= 1}
+                  disabled={!audioState.playlist || audioState.playlist.length <= 1}
                 >
                   ⏮️
                 </button>
@@ -214,7 +222,7 @@ const AudioPlayerApp: React.FC = () => {
                 <button 
                   className="control-button" 
                   onClick={handleNextTrack}
-                  disabled={audioState.playlist.length <= 1}
+                  disabled={!audioState.playlist || audioState.playlist.length <= 1}
                 >
                   ⏭️
                 </button>
@@ -243,10 +251,10 @@ const AudioPlayerApp: React.FC = () => {
 
         <div className="playlist">
           <div className="playlist-header">
-            Playlist ({audioState.playlist.length} tracks)
+            Playlist ({audioState.playlist?.length || 0} tracks)
           </div>
 
-          {audioState.playlist.map((track, index) => (
+          {audioState.playlist && audioState.playlist.map((track, index) => (
             <div
               key={track.id}
               className={`playlist-item ${index === audioState.currentIndex ? 'active' : ''}`}
@@ -270,7 +278,7 @@ const AudioPlayerApp: React.FC = () => {
             </div>
           ))}
 
-          {audioState.playlist.length === 0 && (
+          {(!audioState.playlist || audioState.playlist.length === 0) && (
             <div className="empty-playlist">
               <div className="empty-playlist-text">Your playlist is empty</div>
               <div className="empty-playlist-hint">Add your first track below</div>

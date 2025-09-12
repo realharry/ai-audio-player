@@ -130,9 +130,19 @@ class AudioManager {
   async play() {
     if (this.audioState.currentIndex >= 0 && this.audioState.playlist.length > 0) {
       const track = this.audioState.playlist[this.audioState.currentIndex];
-      await this.sendToOffscreen({ action: 'PLAY_AUDIO', url: track.url });
-      this.audioState.isPlaying = true;
-      this.audioState.currentTrack = track.url;
+      if (track && track.url) {
+        try {
+          await this.sendToOffscreen({ action: 'PLAY_AUDIO', url: track.url });
+          this.audioState.isPlaying = true;
+          this.audioState.currentTrack = track.url;
+        } catch (error) {
+          console.error('Failed to send play command to offscreen:', error);
+          this.audioState.isPlaying = false;
+        }
+      } else {
+        console.warn('Current track has no valid URL');
+        this.audioState.isPlaying = false;
+      }
     }
   }
 
@@ -168,6 +178,7 @@ class AudioManager {
     const index = this.audioState.playlist.findIndex(track => track.id === trackId);
     if (index !== -1) {
       this.audioState.playlist.splice(index, 1);
+      // Fix currentIndex if it's out of bounds
       if (this.audioState.currentIndex >= this.audioState.playlist.length) {
         this.audioState.currentIndex = Math.max(0, this.audioState.playlist.length - 1);
       }
@@ -253,10 +264,18 @@ class AudioManager {
     try {
       const result = await chrome.storage.local.get(['audioState']);
       if (result.audioState) {
-        this.audioState = { ...this.audioState, ...result.audioState };
+        // Ensure playlist is always an array
+        const savedState = result.audioState;
+        if (!Array.isArray(savedState.playlist)) {
+          savedState.playlist = [];
+        }
+        this.audioState = { ...this.audioState, ...savedState };
       }
     } catch (error) {
       console.error('Failed to load audio state:', error);
+      // Reset to default state on error
+      this.audioState.playlist = [];
+      this.audioState.currentIndex = -1;
     }
   }
 
