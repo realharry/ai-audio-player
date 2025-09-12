@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "AI Audio Player",
+  "version": "1.0.0",
+  "description": "Chrome extension for playing audio files in the background with sidepanel controls",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Open AI Audio Player"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "activeTab",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ]
+}

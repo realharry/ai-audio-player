@@ -1,0 +1,28 @@
+{
+  "name": "ai-audio-player",
+  "version": "1.0.0",
+  "description": "This Chrome extension allows users to play audio files from local audio files or from audio sources on the Web. The extension supports playback controls (play, pause, stop, seek) and playlist management. The audio playback is done in the background, and the app icon indicates when audio is playing.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && npm run post-build",
+    "post-build": "cp dist/src/sidepanel/sidepanel.html dist/ && sed -i 's|src=\"/sidepanel.js\"|src=\"./sidepanel.js\"|g' dist/sidepanel.html && sed -i 's|href=\"/sidepanel.css\"|href=\"./sidepanel.css\"|g' dist/sidepanel.html && rm -rf dist/src",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["chrome-extension", "audio-player", "react", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/chrome": "^0.1.9",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vite-plugin-web-extension": "^4.4.5"
+  }
+}
