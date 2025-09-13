@@ -5,6 +5,7 @@ interface AudioTrack {
   name: string;
   url: string;
   duration?: number;
+  fileSize?: number; // Size in bytes
 }
 
 interface AudioState {
@@ -15,6 +16,8 @@ interface AudioState {
   playlist: AudioTrack[];
   currentIndex: number;
   volume: number;
+  isLoading: boolean;
+  isBuffering: boolean;
 }
 
 const AudioPlayerApp: React.FC = () => {
@@ -25,7 +28,9 @@ const AudioPlayerApp: React.FC = () => {
     duration: 0,
     playlist: [],
     currentIndex: -1,
-    volume: 1.0
+    volume: 1.0,
+    isLoading: false,
+    isBuffering: false
   });
 
   const [trackName, setTrackName] = useState('');
@@ -158,14 +163,39 @@ const AudioPlayerApp: React.FC = () => {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Check file size and warn for large files
+      const fileSizeInMB = file.size / (1024 * 1024);
+      if (fileSizeInMB > 50) {
+        const proceed = confirm(
+          `This audio file is ${fileSizeInMB.toFixed(1)}MB. Large files may take a while to load and play. ` +
+          `For better performance, consider using files smaller than 50MB. Do you want to continue?`
+        );
+        if (!proceed) {
+          // Clear the file input
+          event.target.value = '';
+          return;
+        }
+      }
+      
       const url = URL.createObjectURL(file);
       const track: AudioTrack = {
         id: Date.now().toString(),
         name: file.name,
-        url: url
+        url: url,
+        fileSize: file.size
       };
       sendCommand('ADD_TRACK', { track });
     }
+  };
+
+  const formatFileSize = (bytes?: number): string => {
+    if (!bytes) return '';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) {
+      const kb = bytes / 1024;
+      return ` (${kb.toFixed(0)}KB)`;
+    }
+    return ` (${mb.toFixed(1)}MB)`;
   };
 
   const formatTime = (time: number): string => {
@@ -189,7 +219,11 @@ const AudioPlayerApp: React.FC = () => {
           {currentTrack ? (
             <>
               <div className="track-info">
-                <div className="track-name">{currentTrack.name}</div>
+                <div className="track-name">
+                  {currentTrack.name}
+                  {audioState.isLoading && <span className="loading-indicator"> ⏳ Loading...</span>}
+                  {audioState.isBuffering && <span className="buffering-indicator"> ⏸ Buffering...</span>}
+                </div>
                 <div className="track-time">
                   {formatTime(audioState.currentTime)} / {formatTime(audioState.duration)}
                 </div>
@@ -206,23 +240,28 @@ const AudioPlayerApp: React.FC = () => {
                 <button 
                   className="control-button" 
                   onClick={handlePreviousTrack}
-                  disabled={!audioState.playlist || audioState.playlist.length <= 1}
+                  disabled={!audioState.playlist || audioState.playlist.length <= 1 || audioState.isLoading}
                 >
                   ⏮️
                 </button>
-                <button className="control-button" onClick={handleStop}>
+                <button 
+                  className="control-button" 
+                  onClick={handleStop}
+                  disabled={audioState.isLoading}
+                >
                   ⏹️
                 </button>
                 <button
                   className="control-button play"
                   onClick={audioState.isPlaying ? handlePause : handlePlay}
+                  disabled={audioState.isLoading}
                 >
-                  {audioState.isPlaying ? '⏸️' : '▶️'}
+                  {audioState.isLoading ? '⏳' : (audioState.isPlaying ? '⏸️' : '▶️')}
                 </button>
                 <button 
                   className="control-button" 
                   onClick={handleNextTrack}
-                  disabled={!audioState.playlist || audioState.playlist.length <= 1}
+                  disabled={!audioState.playlist || audioState.playlist.length <= 1 || audioState.isLoading}
                 >
                   ⏭️
                 </button>
@@ -261,7 +300,13 @@ const AudioPlayerApp: React.FC = () => {
               onClick={() => handleSelectTrack(track.id)}
             >
               <div className="playlist-item-info">
-                <div className="playlist-item-name">{track.name}</div>
+                <div className="playlist-item-name">
+                  {track.name}
+                  {formatFileSize(track.fileSize)}
+                  {track.fileSize && track.fileSize > 50 * 1024 * 1024 && (
+                    <span className="large-file-warning"> ⚠️</span>
+                  )}
+                </div>
                 <div className="playlist-item-url">{track.url}</div>
               </div>
               <div className="playlist-item-actions">
@@ -330,6 +375,10 @@ const AudioPlayerApp: React.FC = () => {
             >
               ➕ Add Track
             </button>
+          </div>
+          
+          <div className="performance-tip">
+            💡 <strong>Tip:</strong> For best performance, use audio files under 50MB. Large files may take longer to load.
           </div>
         </div>
       </div>

@@ -8,6 +8,8 @@ interface AudioState {
   playlist: AudioTrack[];
   currentIndex: number;
   volume: number;
+  isLoading: boolean;
+  isBuffering: boolean;
 }
 
 interface AudioTrack {
@@ -15,6 +17,7 @@ interface AudioTrack {
   name: string;
   url: string;
   duration?: number;
+  fileSize?: number; // Size in bytes
 }
 
 class AudioManager {
@@ -25,7 +28,9 @@ class AudioManager {
     duration: 0,
     playlist: [],
     currentIndex: -1,
-    volume: 1.0
+    volume: 1.0,
+    isLoading: false,
+    isBuffering: false
   };
 
   constructor() {
@@ -86,6 +91,30 @@ class AudioManager {
       case 'AUDIO_ERROR':
         console.error('Audio error received:', message.error);
         this.audioState.isPlaying = false;
+        this.audioState.isLoading = false;
+        this.audioState.isBuffering = false;
+        this.broadcastStateUpdate();
+        break;
+      case 'LOADING_STARTED':
+        this.audioState.isLoading = true;
+        this.audioState.isBuffering = false;
+        this.broadcastStateUpdate();
+        break;
+      case 'LOADING_READY':
+        this.audioState.isLoading = false;
+        this.audioState.isBuffering = false;
+        this.broadcastStateUpdate();
+        break;
+      case 'CAN_PLAY':
+        this.audioState.isLoading = false;
+        this.broadcastStateUpdate();
+        break;
+      case 'BUFFERING':
+        this.audioState.isBuffering = true;
+        this.broadcastStateUpdate();
+        break;
+      case 'PLAYING':
+        this.audioState.isBuffering = false;
         this.broadcastStateUpdate();
         break;
       default:
@@ -132,16 +161,23 @@ class AudioManager {
       const track = this.audioState.playlist[this.audioState.currentIndex];
       if (track && track.url) {
         try {
+          this.audioState.isLoading = true;
+          this.audioState.isBuffering = false;
+          this.broadcastStateUpdate(); // Immediate feedback to UI
+          
           await this.sendToOffscreen({ action: 'PLAY_AUDIO', url: track.url });
           this.audioState.isPlaying = true;
           this.audioState.currentTrack = track.url;
         } catch (error) {
           console.error('Failed to send play command to offscreen:', error);
           this.audioState.isPlaying = false;
+          this.audioState.isLoading = false;
+          this.audioState.isBuffering = false;
         }
       } else {
         console.warn('Current track has no valid URL');
         this.audioState.isPlaying = false;
+        this.audioState.isLoading = false;
       }
     }
   }
@@ -168,6 +204,12 @@ class AudioManager {
   }
 
   async addTrack(track: AudioTrack) {
+    // Log helpful message for large files
+    if (track.fileSize && track.fileSize > 50 * 1024 * 1024) {
+      console.log(`Adding large file (${(track.fileSize / (1024 * 1024)).toFixed(1)}MB): ${track.name}`);
+      console.log('Large files may take longer to load and play.');
+    }
+    
     this.audioState.playlist.push(track);
     if (this.audioState.currentIndex === -1) {
       this.audioState.currentIndex = 0;
@@ -195,6 +237,8 @@ class AudioManager {
       const wasPlaying = this.audioState.isPlaying;
       await this.stop();
       this.audioState.currentIndex = index;
+      this.audioState.isLoading = false;
+      this.audioState.isBuffering = false;
       if (wasPlaying) {
         await this.play();
       }

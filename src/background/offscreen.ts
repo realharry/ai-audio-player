@@ -9,6 +9,8 @@ class OffscreenAudioPlayer {
       console.error('Audio player element not found in offscreen document');
       return;
     }
+    // Optimize for large file performance
+    this.audio.preload = 'metadata'; // Only load metadata initially, not entire file
     this.setupMessageListener();
     this.setupAudioEventListeners();
   }
@@ -24,6 +26,33 @@ class OffscreenAudioPlayer {
     
     this.audio.addEventListener('loadedmetadata', () => {
       this.sendStateUpdate();
+    });
+
+    this.audio.addEventListener('loadstart', () => {
+      // Notify that loading has started
+      chrome.runtime.sendMessage({
+        action: 'LOADING_STARTED'
+      }).catch(error => {
+        console.debug('Failed to send loading started message:', error);
+      });
+    });
+
+    this.audio.addEventListener('loadeddata', () => {
+      // Notify that enough data is loaded to start playback
+      chrome.runtime.sendMessage({
+        action: 'LOADING_READY'
+      }).catch(error => {
+        console.debug('Failed to send loading ready message:', error);
+      });
+    });
+
+    this.audio.addEventListener('canplay', () => {
+      // Audio can start playing
+      chrome.runtime.sendMessage({
+        action: 'CAN_PLAY'
+      }).catch(error => {
+        console.debug('Failed to send can play message:', error);
+      });
     });
 
     this.audio.addEventListener('timeupdate', () => {
@@ -70,6 +99,24 @@ class OffscreenAudioPlayer {
     this.audio.addEventListener('seeked', () => {
       this.sendStateUpdate();
     });
+
+    this.audio.addEventListener('waiting', () => {
+      // Audio is waiting for more data (buffering)
+      chrome.runtime.sendMessage({
+        action: 'BUFFERING'
+      }).catch(error => {
+        console.debug('Failed to send buffering message:', error);
+      });
+    });
+
+    this.audio.addEventListener('playing', () => {
+      // Audio has started playing after being paused or delayed due to lack of data
+      chrome.runtime.sendMessage({
+        action: 'PLAYING'
+      }).catch(error => {
+        console.debug('Failed to send playing message:', error);
+      });
+    });
   }
 
   private handleMessage(message: any, sendResponse: (response?: any) => void) {
@@ -115,22 +162,64 @@ class OffscreenAudioPlayer {
       
       this.audio.src = url;
       
-      // Wait for the audio to be ready before playing
+      // For better performance with large files, use progressive loading
+      // Wait for 'loadeddata' instead of 'canplay' to start playback sooner
       await new Promise((resolve, reject) => {
-        const onCanPlay = () => {
+        let resolved = false;
+        
+        const cleanup = () => {
+          this.audio.removeEventListener('loadeddata', onLoadedData);
           this.audio.removeEventListener('canplay', onCanPlay);
           this.audio.removeEventListener('error', onError);
-          resolve(void 0);
+          this.audio.removeEventListener('abort', onAbort);
+          clearTimeout(timeoutId);
+        };
+        
+        const onLoadedData = () => {
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            resolve(void 0);
+          }
+        };
+        
+        const onCanPlay = () => {
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            resolve(void 0);
+          }
         };
         
         const onError = (e: Event) => {
-          this.audio.removeEventListener('canplay', onCanPlay);
-          this.audio.removeEventListener('error', onError);
-          reject(e);
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            reject(e);
+          }
         };
         
+        const onAbort = () => {
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            reject(new Error('Audio loading was aborted'));
+          }
+        };
+        
+        // Add timeout for large files (30 seconds)
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            reject(new Error('Audio loading timeout - file may be too large or connection too slow'));
+          }
+        }, 30000);
+        
+        this.audio.addEventListener('loadeddata', onLoadedData);
         this.audio.addEventListener('canplay', onCanPlay);
         this.audio.addEventListener('error', onError);
+        this.audio.addEventListener('abort', onAbort);
         
         // Trigger loading
         this.audio.load();
@@ -139,9 +228,10 @@ class OffscreenAudioPlayer {
       await this.audio.play();
     } catch (error) {
       console.error('Failed to play audio:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to play audio';
       chrome.runtime.sendMessage({ 
         action: 'AUDIO_ERROR', 
-        error: error instanceof Error ? error.message : 'Failed to play audio'
+        error: errorMessage
       });
     }
   }

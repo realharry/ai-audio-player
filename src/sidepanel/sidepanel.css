@@ -326,3 +326,38 @@ body {
   font-size: 12px;
   opacity: 0.8;
 }
+
+/* Loading and buffering indicators */
+.loading-indicator, .buffering-indicator {
+  font-size: 12px;
+  opacity: 0.8;
+  color: #ffd54f;
+  animation: pulse 1.5s infinite;
+}
+
+.buffering-indicator {
+  color: #ff9800;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+  100% { opacity: 0.8; }
+}
+
+/* Performance tip styling */
+.performance-tip {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #ffd54f;
+  margin-top: 8px;
+}
+
+/* Large file warning indicator */
+.large-file-warning {
+  font-size: 14px;
+  color: #ff9800;
+}
